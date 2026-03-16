@@ -1,0 +1,17 @@
+[Unit]
+Description=Forge Shorts — API Service
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/mnt/md0/projects/github/shorts
+ExecStart=/usr/bin/python3 /mnt/md0/projects/github/shorts/shorts_api.py
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=shorts-api
+EnvironmentFile=/mnt/md0/projects/github/shorts/.env
+
+[Install]
+WantedBy=multi-user.target

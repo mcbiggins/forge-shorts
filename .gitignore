@@ -1,0 +1,25 @@
+# Environment / secrets
+.env
+.env.local
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# macOS
+.DS_Store
+._*
+
+# IDE
+.vscode/
+.idea/
+
+# Docker build artifacts
+*.tar
+
+# The main Forge/clippy project tree (lives at /mnt/md0/docker/projects/clippy/)
+clippy/

@@ -1,0 +1,20 @@
+[Unit]
+Description=Forge Shorts — folder watcher daemon
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+WorkingDirectory=/mnt/md0/projects/github/shorts
+ExecStart=/usr/bin/python3 /mnt/md0/projects/github/shorts/watcher.py
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=forge-shorts
+
+# Pass env file
+EnvironmentFile=/mnt/md0/projects/github/shorts/.env
+
+[Install]
+WantedBy=multi-user.target
