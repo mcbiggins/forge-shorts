@@ -8,18 +8,48 @@ Forge Shorts is a standalone module of The Forge post-production pipeline. It au
 
 The system runs as a Docker container (`forge-shorts-api`) within the existing Forge Docker stack at `/mnt/md0/docker/projects/clippy/`. The React UI is integrated into the Forge frontend at the `/shorts` route.
 
+## GitHub Repository
+
+**Repo**: `github.com/mcbiggins/forge-shorts` (public)
+**Image**: `ghcr.io/mcbiggins/forge-shorts:latest`
+
+Pushing to `main` triggers GitHub Actions → builds Docker image → pushes to GHCR → Watchtower auto-pulls within 5 minutes.
+
 ## Two Working Directories
 
-- **`/mnt/md0/projects/github/shorts/`** — Python pipeline code + Dockerfile. Edit Python files here.
+- **`/mnt/md0/projects/github/shorts/`** — Python pipeline code + Dockerfile. Edit Python files here. This is the git repo.
 - **`/mnt/md0/docker/projects/clippy/`** — Docker stack, frontend, nginx. Edit React/UI/compose files here.
 
-After Python changes: `cd /mnt/md0/docker/projects/clippy && docker compose build shorts-api && docker compose up -d shorts-api`
-After frontend changes: `cd /mnt/md0/docker/projects/clippy && docker compose build frontend && docker compose up -d frontend`
+### Deploying Changes
+
+**Python/pipeline changes** (this repo):
+```bash
+# Edit files in /mnt/md0/projects/github/shorts/
+git add -A && git commit -m "description" && git push
+# GitHub Actions builds image → GHCR → Watchtower auto-deploys within 5 min
+# Or force immediate pull:
+docker compose -f /mnt/md0/docker/projects/clippy/docker-compose.yml pull shorts-api && \
+docker compose -f /mnt/md0/docker/projects/clippy/docker-compose.yml up -d shorts-api
+```
+
+**Frontend changes** (clippy repo):
+```bash
+cd /mnt/md0/docker/projects/clippy
+docker compose build frontend && docker compose up -d frontend
+```
+
+**Local dev build** (bypass GHCR, build from local source):
+```bash
+cd /mnt/md0/docker/projects/clippy
+# Temporarily uncomment `build: ./shorts` in docker-compose.yml, comment out `image:`
+docker compose build shorts-api && docker compose up -d shorts-api
+```
 
 ## Repository Layout
 
 ```
 /mnt/md0/projects/github/shorts/     ← THIS REPO (Python pipeline + Dockerfile)
+├── .github/workflows/build-and-push.yml  ← CI: build + push to ghcr.io on push to main
 ├── CLAUDE.md
 ├── Dockerfile                        ← nvidia/cuda + BtbN FFmpeg + NVENC + Montserrat Black
 ├── requirements.txt
@@ -59,9 +89,12 @@ After frontend changes: `cd /mnt/md0/docker/projects/clippy && docker compose bu
 ## Commands
 
 ```bash
-# Rebuild shorts API after Python changes
+# Deploy pipeline changes (push to GitHub, Watchtower auto-pulls)
+git add -A && git commit -m "description" && git push
+
+# Force immediate deploy (skip waiting for Watchtower)
 cd /mnt/md0/docker/projects/clippy
-docker compose build shorts-api && docker compose up -d shorts-api
+docker compose pull shorts-api && docker compose up -d shorts-api
 
 # Rebuild frontend after JSX/nginx changes
 docker compose build frontend && docker compose up -d frontend
@@ -88,10 +121,11 @@ find /mnt/clippy -name "*.json" -path "*shorts_cache*" -delete
 
 | Service | Container | Port | Purpose |
 |---|---|---|---|
-| Shorts API | `forge-shorts-api` | 5682 | FastAPI + pipeline orchestration |
+| Shorts API | `forge-shorts-api` | 5682 | FastAPI + pipeline orchestration (image: `ghcr.io/mcbiggins/forge-shorts`) |
 | Whisper ASR | `whisper-asr` | 9050 | Speech-to-text (GPU, separate stack) |
 | PostgreSQL | `forge-postgres` | 5432 | Shared with Forge main pipeline |
 | Forge Frontend | `forge-frontend` | 3000 | React UI, proxies all APIs via Nginx |
+| Watchtower | `forge-watchtower` | — | Auto-pulls new shorts-api images from GHCR every 5 min |
 
 The shorts container has:
 - **NVIDIA GPU access** (GPU 1 via `CUDA_VISIBLE_DEVICES=1`) for NVENC encoding
@@ -169,7 +203,7 @@ ANTHROPIC_API_KEY=sk-ant-...
 2. **GPU encoding** — All FFmpeg uses `h264_nvenc` on GPU 1 (RTX 3090).
 3. **Smart crop, not letterbox** — 16:9 → 9:16 by cropping, not adding black bars. Claude Vision picks crop position.
 4. **Montage with dissolves** — Multi-clip montages use `fadeblack` xfade transitions (0.5s) + audio crossfade.
-5. **Subtitle style** — Montserrat Black, size 75 at 1080x1920, 16 chars/line max, MarginV=480 (25% up from bottom), active word yellow 110% scale.
+5. **Subtitle style** — Montserrat Black, size 115 at 1080x1920, outline 7, 16 chars/line max, MarginV=480 (25% up from bottom), active word yellow 110% scale.
 6. **Segment tolerance** — Under-min segments kept (hard floor: 60% of min). Over-max trimmed by shortening/dropping clips.
 7. **Claude model** — `claude-sonnet-4-6` for segment selection and vision analysis.
 8. **Transcript caching** — Whisper skipped if cached transcript exists. Segments cached per clip_style.
@@ -249,12 +283,19 @@ print(r.model, r.content[0].text)"
 
 ### Steps
 
-1. Clone this repo and the clippy stack
-2. Set secrets in `clippy/.env`: `POSTGRES_PASSWORD` and `ANTHROPIC_API_KEY`
-3. Create directories: `mkdir -p /mnt/clippy/shorts{,_output,_processing,_done}`
-4. Build: `cd clippy && docker compose build shorts-api frontend && docker compose up -d`
-5. Verify: `curl http://<ip>:3000/api/shorts/health`
-6. Browse to `http://<ip>:3000/shorts`
+1. Clone this repo: `git clone https://github.com/mcbiggins/forge-shorts.git`
+2. The Docker image is pulled automatically from `ghcr.io/mcbiggins/forge-shorts:latest`
+3. Set secrets in the Forge stack `.env`: `POSTGRES_PASSWORD` and `ANTHROPIC_API_KEY`
+4. Create directories: `mkdir -p /mnt/clippy/shorts{,_output,_processing,_done}`
+5. Start: `docker compose up -d shorts-api` (pulls from GHCR)
+6. Verify: `curl http://<ip>:3000/api/shorts/health`
+7. Browse to `http://<ip>:3000/shorts`
+
+### CI/CD Pipeline
+- Push to `main` → GitHub Actions builds Docker image → pushes to GHCR
+- Watchtower polls GHCR every 5 min and auto-deploys new images
+- Only `forge-shorts-api` is monitored (label-based opt-in: `com.centurylinklabs.watchtower.enable=true`)
+- GHCR auth: Docker must be logged into `ghcr.io` on the host (`docker login ghcr.io`)
 
 ### Hardware Adjustments
 - **GPU**: Change `CUDA_VISIBLE_DEVICES` in docker-compose.yml
