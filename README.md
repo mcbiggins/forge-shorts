@@ -1,5 +1,7 @@
 # Forge Shorts
 
+> ⚠️ **DEPRECATED** — merged into `github.com/mcbiggins/clippy` under `shorts/` as of July 2026; this repo is no longer maintained.
+
 Autonomous pipeline that converts long-form video into vertical YouTube Shorts. Drop a video file, get back polished 9:16 Shorts with karaoke-style subtitles — no human interaction required.
 
 **Pipeline**: Video drop → Whisper transcription → Claude segment selection → smart 9:16 crop (Claude Vision) → NVENC GPU encoding → CapCut-style karaoke subtitles → final MP4
